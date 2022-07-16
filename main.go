@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -18,6 +19,10 @@ func check(e error) {
 
 type PingResponse struct {
 	Count int32
+}
+
+type RequestedValue struct {
+	Amount int64 `json:"amount"`
 }
 
 func main() {
@@ -51,12 +56,41 @@ func main() {
 	})
 
 	/*
+		Count each request (Middleware)
+	*/
+	router.Use(func(next http.Handler) http.Handler {
+		fn := func(w http.ResponseWriter, r *http.Request) {
+			responseCount.Count += 1
+			next.ServeHTTP(w, r)
+		}
+
+		return http.HandlerFunc(fn)
+	})
+
+	/*
 		Serve ping.html
 	*/
 	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		responseCount.Count += 1
-
 		compiledTemplates.ExecuteTemplate(w, "ping.html", responseCount)
+	})
+
+	/*
+		Serve post.html
+	*/
+	router.Post("/", func(w http.ResponseWriter, r *http.Request) {
+		decoder := json.NewDecoder(r.Body)
+		amount := RequestedValue{
+			Amount: -1,
+		}
+		err := decoder.Decode(&amount)
+		check(err)
+
+		if amount.Amount < 0 {
+			http.Error(w, http.StatusText(http.StatusNotAcceptable), http.StatusNotAcceptable)
+			return
+		}
+
+		compiledTemplates.ExecuteTemplate(w, "post.html", amount)
 	})
 
 	/*
